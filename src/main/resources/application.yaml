@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: req
+
+# API pública e gratuita usada por todos os exemplos
+api:
+  base-url: https://jsonplaceholder.typicode.com
