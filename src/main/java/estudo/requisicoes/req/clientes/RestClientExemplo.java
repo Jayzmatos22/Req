@@ -1,20 +1,22 @@
 package estudo.requisicoes.req.clientes;
 
+import estudo.requisicoes.req.dtos.UserDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
-@Component
+import java.util.List;
+
+@Configuration
 public class RestClientExemplo {
 
-    @Autowired
-    private final RestClient restClient;
-
     // recebe do yaml e repassa na constructor
-    public RestClientExemplo(RestClient.Builder builder, @Value("${api.base-url}") String baseUrl){
-        this.restClient = builder
-                .baseUrl(baseUrl)
-                .build();
+    @Bean
+    public RestClient restClient(RestClient.Builder builder, @Value("${api.base-url}") String baseUrl){
+        return builder.baseUrl(baseUrl).build();
     }
+
 }
