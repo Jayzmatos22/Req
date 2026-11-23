@@ -34,4 +34,15 @@ public class Global {
                 req);
     }
 
+    @ExceptionHandler
+    public ResponseEntity<BodyAPIError> handlerEmailNotFound(EmailNotFoundException ex, HttpServletRequest req){
+        return build(
+                HttpStatus.NOT_FOUND,
+                "Email não encontrado",
+                ex.getMessage(),
+                req);
+    }
+
+
+
 }
