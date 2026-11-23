@@ -43,6 +43,15 @@ public class Global {
                 req);
     }
 
+    @ExceptionHandler
+    public ResponseEntity<BodyAPIError> handlerEmailSearch(SearchEmailException ex, HttpServletRequest req){
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Email inválido",
+                ex.getMessage(),
+                req);
+    }
+
 
 
 }
