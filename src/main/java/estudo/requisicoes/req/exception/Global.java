@@ -52,6 +52,15 @@ public class Global {
                 req);
     }
 
+    @ExceptionHandler
+    public ResponseEntity<BodyAPIError> handlerPageNotFound(PageNotFoundException ex, HttpServletRequest req){
+        return build(
+                HttpStatus.NOT_FOUND,
+                "Limite de páginas",
+                ex.getMessage(),
+                req);
+    }
+
 
 
 }
