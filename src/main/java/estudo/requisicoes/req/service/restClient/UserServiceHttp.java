@@ -16,7 +16,7 @@ import java.util.List;
 
 @RequiredArgsConstructor
 @Service
-public class UserService {
+public class UserServiceHttp {
 
     private final RestClient restClient;
 
