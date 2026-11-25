@@ -6,8 +6,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class Global {
@@ -59,6 +62,25 @@ public class Global {
                 "Limite de páginas",
                 ex.getMessage(),
                 req);
+    }
+
+    @ExceptionHandler
+    public ResponseEntity<BodyAPIError> handlerTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Parâmetro inválido",
+                "O parâmetro '" + ex.getName() + "' deve ser um número. Recebido: " + ex.getValue(),
+                req);
+    }
+
+    @ExceptionHandler
+    public ResponseEntity<BodyAPIError> handlerValidation(HandlerMethodValidationException ex, HttpServletRequest req) {
+        String mensagem = ex.getParameterValidationResults().stream()
+                .map(r -> r.getMethodParameter().getParameterName() + ": "
+                        + r.getResolvableErrors().get(0).getDefaultMessage())
+                .collect(Collectors.joining("; "));
+
+        return build(HttpStatus.BAD_REQUEST, "Parâmetro inválido", mensagem, req);
     }
 
 
