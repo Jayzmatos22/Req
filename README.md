@@ -14,8 +14,8 @@
   <img src="https://img.shields.io/badge/HttpURLConnection-✓-ED8B00?style=flat-square&logo=openjdk&logoColor=white" alt="HttpURLConnection">
   <img src="https://img.shields.io/badge/RestTemplate-✓-6DB33F?style=flat-square&logo=spring&logoColor=white" alt="RestTemplate">
   <img src="https://img.shields.io/badge/@HttpExchange-✓-6DB33F?style=flat-square&logo=spring&logoColor=white" alt="HttpExchange">
-  <img src="https://img.shields.io/badge/WebClient-6DB33F?style=flat-square&logo=spring&logoColor=white" alt="WebClient">
-  <img src="https://img.shields.io/badge/Apache_HttpClient_5-D22128?style=flat-square&logo=apache&logoColor=white" alt="Apache HttpClient 5">
+  <img src="https://img.shields.io/badge/WebClient-✓-6DB33F?style=flat-square&logo=spring&logoColor=white" alt="WebClient">
+  <img src="https://img.shields.io/badge/Apache_HttpClient_5-✓-D22128?style=flat-square&logo=apache&logoColor=white" alt="Apache HttpClient 5">
 </p>
 
 <p align="center">
@@ -46,8 +46,8 @@ API alvo: [JSONPlaceholder](https://jsonplaceholder.typicode.com), pública e gr
 | 3 | **`HttpURLConnection`** | Java 1.1 | nenhuma | baixo nível, mutável | ✅ |
 | 4 | **`RestTemplate`** | Spring (legado) | `spring-boot-starter-restclient` | um método pronto por caso | ✅ |
 | 5 | **`@HttpExchange`** | Spring 6+ | `spring-boot-starter-restclient` | declarativo (só interface) | ✅ |
-| 6 | `WebClient` | Spring WebFlux | `spring-boot-starter-webclient` | reativo (`Mono`/`Flux`) | ⬜ |
-| 7 | Apache HttpClient 5 | terceiros | `httpclient5` | baixo nível, configurável | ⬜ |
+| 6 | **`WebClient`** | Spring WebFlux | `spring-boot-starter-webclient` | reativo (`Mono`/`Flux`) | ✅ |
+| 7 | **Apache HttpClient 5** | terceiros | `httpclient5` | baixo nível, configurável | ✅ |
 
 ---
 
@@ -56,20 +56,38 @@ API alvo: [JSONPlaceholder](https://jsonplaceholder.typicode.com), pública e gr
 A mesma requisição passa sempre por **4 etapas**: montar, enviar, conferir o status e converter o JSON.
 O que muda é **quem faz cada uma** — você ou o cliente.
 
-| Etapa | RestClient | HttpClient | HttpURLConnection | RestTemplate | @HttpExchange |
-|---|---|---|---|---|---|
-| **Criar** | `@Bean` com Builder | campo `final` (`newBuilder()`) | **local**, 1 por requisição | `@Bean` com `RestTemplateBuilder` | `@Bean` que gera um **proxy** da interface |
-| **Montar** | cadeia `.get().uri(...)` | `HttpRequest.newBuilder()` | `setRequestMethod` / `setRequestProperty` | argumentos do método (`getForObject(url, tipo, vars)`) | **anotações** na interface |
-| **Query params** | `.queryParam(...)` | `UriComponentsBuilder` / `URLEncoder` | concatenação / `URLEncoder` | `{}` no template | `@RequestParam` |
-| **Enviar** | `.retrieve()` | `client.send(...)` | implícito no `getResponseCode()` | a própria chamada | chamar o método da interface |
-| **Status** | exceção ou `.onStatus` | `statusCode()`, nunca lança | `getResponseCode()` (`int`) | exceção, **sem `onStatus`** → `try/catch` | exceção → `try/catch` |
-| **JSON** | automático | manual (`jsonMapper`) | manual (`jsonMapper`) | automático | automático (tipo de retorno) |
-| **Lista** | `ParameterizedTypeReference` | `TypeReference` | `TypeReference` | `X[].class` ou `exchange(...)` | `List<X>` no retorno |
-| **Linhas no service p/ um GET** | ~5 | ~10 | ~20 (no componente) | 1 | **1** |
+### Clientes do Spring
 
-**Conclusão:** HttpURLConnection e HttpClient mostram o que acontece de verdade; RestClient e RestTemplate fazem
-o mesmo com o Spring cuidando do JSON e dos erros; o `@HttpExchange` vai além e gera o código a partir de uma interface —
-mas, por baixo, é o RestClient executando.
+| Etapa | RestClient | RestTemplate | @HttpExchange | WebClient |
+|---|---|---|---|---|
+| **Criar** | `@Bean` com Builder | `@Bean` com `RestTemplateBuilder` | `@Bean` que gera um **proxy** da interface | `@Bean` com Builder + motor Reactor Netty |
+| **Montar** | cadeia `.get().uri(...)` | argumentos do método (`getForObject(url, tipo, vars)`) | **anotações** na interface | cadeia `.get().uri(...)` (igual ao RestClient) |
+| **Query params** | `.queryParam(...)` | `{}` no template | `@RequestParam` | `.queryParam(...)` |
+| **Enviar** | `.retrieve()` | a própria chamada | chamar o método da interface | **quando alguém assina** (`.block()` ou o Spring) |
+| **Status** | exceção ou `.onStatus` (lança) | exceção → `try/catch` | exceção → `try/catch` | `.onStatus` que **devolve** `Mono.error(...)` |
+| **Resultado** | o objeto | o objeto | o objeto | `Mono<X>` / `Flux<X>` (promessa) |
+| **Lista** | `ParameterizedTypeReference` | `X[].class` ou `exchange(...)` | `List<X>` no retorno | `bodyToFlux(X.class).collectList()` |
+| **Timeout** | no builder | no builder (`connectTimeout`, `readTimeout`) | o do RestClient usado | no **motor** (`HttpClient` do Reactor Netty) |
+
+### Clientes "manuais" (você faz cada etapa)
+
+| Etapa | HttpClient (Java) | HttpURLConnection | Apache HttpClient 5 |
+|---|---|---|---|
+| **Criar** | campo `final` (`newBuilder()`) | **local**, 1 por requisição | `@Bean CloseableHttpClient` (`HttpClients.custom()`) |
+| **Montar** | `HttpRequest.newBuilder()...GET()` | `setRequestMethod` / `setRequestProperty` | **uma classe por verbo**: `new HttpGet(uri)` |
+| **Query params** | `UriComponentsBuilder` / `URLEncoder` | concatenação / `URLEncoder` | **`URIBuilder`** próprio |
+| **Enviar** | `client.send(request, BodyHandlers.ofString())` | implícito no `getResponseCode()` | `execute(request, response -> {...})` |
+| **Status** | `statusCode()` | `getResponseCode()` | `getCode()` |
+| **Corpo** | `response.body()` | `getInputStream()` / `getErrorStream()` → bytes | `EntityUtils.toString(response.getEntity())` |
+| **Fechar** | automático | `disconnect()` no `finally` | a resposta fecha sozinha; o client, no fim da aplicação |
+| **Timeout** | `connectTimeout` no builder | `setConnectTimeout` / `setReadTimeout` | `RequestConfig` com `Timeout` |
+
+Nos três: 4xx/5xx **não lançam exceção** (você confere o código) e o JSON é convertido **na mão** com `jsonMapper.readValue(...)`.
+
+**Conclusão:** os clientes manuais mostram o que acontece de verdade — montar, enviar, conferir, converter, fechar.
+Os do Spring fazem as mesmas etapas por você, cada um com um estilo: cadeia (RestClient), método pronto (RestTemplate),
+interface (`@HttpExchange`) e reativo (WebClient). Por baixo, `@HttpExchange` é um RestClient, e RestClient/WebClient
+podem usar Reactor Netty, JDK ou Apache como **motor**.
 
 ---
 
@@ -178,6 +196,99 @@ public interface HttpExchangeExemplo {
 - O tipo de retorno do método define o `.body(...)`: filtro por email continua sendo `List<UserDTO>`.
 - O service fica só com regras (404 → exceção, lista vazia → exceção); a requisição é `api.getById(id)`.
 
+## 6. `WebClient` ✅
+
+`clientes/WebClientExemplo` (`@Configuration`) cria o `@Bean WebClient` com o `WebClient.Builder` injetado e o
+**Reactor Netty** como motor, onde ficam os timeouts:
+
+```java
+HttpClient httpClient = HttpClient.create()                       // reactor.netty.http.client.HttpClient
+        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5_000)
+        .responseTimeout(Duration.ofSeconds(5));
+return builder.baseUrl(baseUrl)
+        .clientConnector(new ReactorClientHttpConnector(httpClient))
+        .build();
+```
+
+Duas rotas para a mesma busca — uma bloqueando, outra reativa:
+
+```java
+public UserDTO getById(Long id) {                 // GET /api/webclient/users/{id}
+    return webClient.get().uri("/users/{id}", id)
+            .retrieve()
+            .onStatus(s -> s.value() == 404, response -> Mono.error(new UserNotFoundException(id)))
+            .bodyToMono(UserDTO.class)
+            .block();                             // espera aqui
+}
+
+public Mono<UserDTO> getByIdMono(Long id) {       // GET /api/webclient/users/reactive/{id}
+    return webClient.get().uri("/users/{id}", id)
+            .retrieve()
+            .onStatus(s -> s.value() == 404, response -> Mono.error(new UserNotFoundException(id)))
+            .bodyToMono(UserDTO.class);           // devolve a promessa
+}
+```
+
+**O que os logs de thread mostraram**
+
+```
+[BLOCK] 1. entrou no service  -> http-nio-8080-exec-4
+[BLOCK] 2. resposta chegou    -> reactor-http-nio-2
+[BLOCK] 3. saiu do .block()   -> http-nio-8080-exec-4     ← a thread do Tomcat esperou até aqui
+
+[MONO]  1. entrou no service  -> http-nio-8080-exec-8
+[MONO]  2. devolveu o Mono    -> http-nio-8080-exec-8     ← a thread do Tomcat foi liberada aqui
+[MONO]  3. resposta chegou    -> reactor-http-nio-2
+```
+
+No Postman as duas rotas respondem igual. A diferença é interna: no `.block()` a thread do Tomcat fica presa esperando
+a API externa; no `Mono` ela é liberada e quem termina o trabalho é o Reactor. Sob carga (ou com `server.tomcat.threads.max: 1`
+e `.delayElement(...)`), o `.block()` faz as requisições esperarem umas às outras.
+
+**Aprendizados**
+- `Mono<T>` = 0 ou 1 valor que **vai chegar**; `Flux<T>` = 0 a N valores. Nada é enviado até alguém **assinar**.
+- O `onStatus` recebe **um** parâmetro (a resposta) e **devolve** `Mono.error(...)` — no reativo, erro é um valor do fluxo.
+- `.block()` é a saída do mundo reativo para o normal: útil para estudar, mas anula a vantagem do WebClient.
+- `Mono<ResponseEntity<X>>` (status decidido quando o valor chega) é o padrão; `ResponseEntity<Mono<X>>` fixa o status antes.
+- Timeout fica no **motor** (Reactor Netty), não no builder do WebClient. Ou por requisição, com `.timeout(Duration)`.
+- Cuidado com o import: o `HttpClient` do motor é `reactor.netty.http.client.HttpClient`, não o `java.net.http.HttpClient`.
+- O aviso `java.lang.System::loadLibrary` no terminal vem do Netty no Java 25; some com `--enable-native-access=ALL-UNNAMED`.
+
+## 7. Apache HttpClient 5 ✅
+
+`clientes/ApacheHttpClientExemplo` (`@Configuration`) cria o `@Bean CloseableHttpClient` com **dois builders**:
+
+```java
+RequestConfig config = RequestConfig.custom()                     // 1. timeouts
+        .setConnectionRequestTimeout(Timeout.ofSeconds(5))
+        .setResponseTimeout(Timeout.ofSeconds(5))
+        .build();
+
+return HttpClients.custom()                                       // 2. o client
+        .setDefaultRequestConfig(config)
+        .setDefaultHeaders(List.of(new BasicHeader("Accept", "application/json")))
+        .build();
+```
+
+No service, a resposta é tratada **dentro** de uma lambda:
+
+```java
+String body = httpClient.execute(new HttpGet(baseUrl + "/users/" + id), response -> {
+    if (response.getCode() == 404) throw new UserNotFoundException(id);
+    return EntityUtils.toString(response.getEntity());   // o que a lambda retorna, o execute retorna
+});
+return jsonMapper.readValue(body, UserDTO.class);
+```
+
+**Aprendizados**
+- Biblioteca de terceiros, no mesmo nível do HttpClient do Java: 4 etapas manuais com outros nomes.
+- **Uma classe por verbo**: `HttpGet`, `HttpPost`...
+- O **response handler** fecha a resposta sozinho: fora da lambda ela já está fechada, então o corpo é lido lá dentro.
+- Tem builder de query próprio (`URIBuilder`), que o HttpClient do Java não tem.
+- Usa a própria classe de tempo (`Timeout`), não `Duration`; headers padrão são uma `List<Header>`.
+- `RequestConfig` (timeouts) e `CloseableHttpClient` (client) são objetos diferentes, cada um com seu `.build()`.
+- O Spring chama `close()` do client sozinho quando a aplicação para.
+
 ---
 
 ## Endpoints
@@ -189,11 +300,15 @@ public interface HttpExchangeExemplo {
 | HttpURLConnection | `/api/httpurl/users` | sem parâmetros | — | — |
 | RestTemplate | `/api/template/users` | `page` `@Min(1)`, `limit` `@Min(1)` `@Max(100)` | ✅ | — |
 | @HttpExchange | `/api/exchange/users` | `page` `@Min(1)`, `limit` `@Min(1)` `@Max(100)` | ✅ | ✅ |
+| WebClient | `/api/webclient/users` | — | ✅ (`.block()`) · `/reactive/{id}` (`Mono`) | — |
+| Apache HttpClient 5 | `/api/apache/users` | — | ✅ | — |
 
 ```http
 GET http://localhost:8080/api/restClient/users?page=2&limit=3
 GET http://localhost:8080/api/template/users/1
 GET http://localhost:8080/api/exchange/users/search?email=Shanna@melissa.tv
+GET http://localhost:8080/api/webclient/users/reactive/1
+GET http://localhost:8080/api/apache/users/1
 ```
 
 **Rotas:** `/{id}` e `/{email}` com o mesmo verbo têm o mesmo formato e geram "Ambiguous mapping" —
@@ -274,9 +389,10 @@ src/main/java/estudo/requisicoes/req/
 │   ├── RestTemplateExemplo.java        @Bean RestTemplate (RestTemplateBuilder)
 │   ├── HttpExchangeExemplo.java        interface declarativa
 │   ├── HttpExchangeConfig.java         @Bean que gera o proxy da interface
-│   └── ...Exemplo.java                 próximos clientes
-├── controller/   restClient/ · httpClient/ · httpUrlClient/ · restTemplate/ · httpExchange/
-├── service/      restClient/ · httpClient/ · httpUrlConnection/ · UserService/ · httpExchange/
+│   ├── WebClientExemplo.java           @Bean WebClient (motor Reactor Netty)
+│   └── ApacheHttpClientExemplo.java    @Bean CloseableHttpClient (RequestConfig)
+├── controller/   restClient/ · httpClient/ · httpUrlClient/ · restTemplate/ · httpExchange/ · webClient/ · apacheHttp/
+├── service/      restClient/ · httpClient/ · httpUrlConnection/ · UserService/ · httpExchange/ · webClient/ · apacheHttpClient5/
 ├── dtos/         UserDTO, BodyAPIError, RespostaHttp
 └── exception/    exceções customizadas + Global (@RestControllerAdvice)
 ```
@@ -288,9 +404,10 @@ cada service/controller precisa de um nome único.
 
 ## Próximos passos
 
-- [ ] WebClient
-- [ ] Apache HttpClient 5
-- [ ] Busca por id e email no HttpClient e no HttpURLConnection; email no RestTemplate
+- [x] Os 7 clientes
+- [ ] Completar as 3 buscas (lista, id, email) em todos os clientes
+- [ ] Apache HttpClient como **motor** do RestClient (`HttpComponentsClientHttpRequestFactory`)
+- [ ] Remover os logs de thread do `UserServiceWebClient` (ou trocar por `@Slf4j`)
 - [ ] Handler de `ExternalApiException` respondendo `502 Bad Gateway`
 - [ ] Handler de `MissingServletRequestParameterException` (parâmetro obrigatório ausente → `400`)
 
@@ -302,4 +419,7 @@ cada service/controller precisa de um nome único.
 - [Spring — HTTP Interface](https://docs.spring.io/spring-framework/reference/integration/rest-clients.html#rest-http-interface)
 - [Java — HttpClient](https://docs.oracle.com/en/java/javase/25/docs/api/java.net.http/java/net/http/HttpClient.html)
 - [Java — HttpURLConnection](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/net/HttpURLConnection.html)
+- [Spring — WebClient](https://docs.spring.io/spring-framework/reference/web/webflux-webclient.html)
+- [Project Reactor — Mono e Flux](https://projectreactor.io/docs/core/release/reference/)
+- [Apache HttpClient 5](https://hc.apache.org/httpcomponents-client-5.4.x/)
 - [JSONPlaceholder — guia](https://jsonplaceholder.typicode.com/guide/)
